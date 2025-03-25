@@ -1,0 +1,10 @@
+{
+  "subsystem": "vendor",
+  "parts": {
+    "middleware": {
+      "module_list": [
+        "//device/soc/ingchips/sdk:sdk"
+      ]
+    }
+  }
+}

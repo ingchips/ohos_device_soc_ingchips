@@ -1,0 +1,79 @@
+# Copyright (c) 2021 INGCHIPS.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import("//kernel/liteos_m/liteos.gni")
+module_name = get_path_info(rebase_path("."), "name")
+
+kernel_module(module_name) {
+  asmflags = board_asmflags
+  sources = [
+    "FWlib/peripheral_adc.c",
+    "FWlib/peripheral_comparator.c",
+    "FWlib/peripheral_dma.c",
+    "FWlib/peripheral_efuse.c",
+    "FWlib/peripheral_gpio.c",
+    "FWlib/peripheral_i2c.c",
+    "FWlib/peripheral_i2s.c",
+    "FWlib/peripheral_ir.c",
+    "FWlib/peripheral_keyscan.c",
+    "FWlib/peripheral_pdm.c",
+    "FWlib/peripheral_pinctrl.c",
+    "FWlib/peripheral_pte.c",
+    "FWlib/peripheral_pwm.c",
+    "FWlib/peripheral_qdec.c",
+    "FWlib/peripheral_rtc.c",
+    "FWlib/peripheral_ssp.c",
+    "FWlib/peripheral_sysctrl.c",
+    "FWlib/peripheral_timer.c",
+    "FWlib/peripheral_uart.c",
+    "FWlib/peripheral_usb.c",
+    "Tools/trace.c",
+    "BSP/eflash.c",
+  ]
+}
+config("public") {
+    include_dirs = [
+      "BSP",
+      "FWlib",
+      "Tools",
+      "bundles/noos_mini/inc",
+    ]
+    if (defined(LOSCFG_SOC_SERIES_ING916)){
+      include_dirs += [
+        "StartUP/ing916",
+      ]
+    }
+    if (defined(LOSCFG_SOC_SERIES_ING9187)||defined(LOSCFG_SOC_SERIES_ING9188)){
+      include_dirs += [
+        "StartUP/ing918",
+      ]
+    }    
+
+    defines = [
+      "USE_STDPERIPH_DRIVER",
+    ]
+    if (defined(LOSCFG_SOC_SERIES_ING916)){
+    ldflags = [
+        "-Wl,--just-symbols=" + rebase_path("bundles/noos_mini/ING9168xx/symdefs.g"),
+    ]
+    }
+   if (defined(LOSCFG_SOC_SERIES_ING9187)){
+    ldflags = [
+    "-Wl,--just-symbols=" + rebase_path("bundles/noos_mini/ING9187xx/symdefs.g"),
+    ]
+    }
+   if (defined(LOSCFG_SOC_SERIES_ING9188)){
+    ldflags = [
+    "-Wl,--just-symbols=" + rebase_path("bundles/noos_mini/ING9188xx/symdefs.g"),
+    ]
+    }
+  }
