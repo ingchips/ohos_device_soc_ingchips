@@ -36,7 +36,7 @@ kernel_module(module_name) {
     "FWlib/peripheral_timer.c",
     "FWlib/peripheral_uart.c",
     "FWlib/peripheral_usb.c",
-    "Tools/trace.c",
+    # "Tools/trace.c",
     "BSP/eflash.c",
   ]
 }
