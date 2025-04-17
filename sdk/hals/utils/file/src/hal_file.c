@@ -1,260 +1,225 @@
-/*
- * Copyright (c) 2025 INGCHIPS.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-#include <errno.h>
-#include <fcntl.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include "utils_file.h"
-#include "log.h"
-#include "hal_file.h"
 
-#define LOG_E(fmt, ...)  HILOG_ERROR(HILOG_MODULE_APP, fmt, ##__VA_ARGS__)
-#define LOG_I(fmt, ...)  HILOG_INFO(HILOG_MODULE_APP, fmt, ##__VA_ARGS__)
+#include <hal_file.h>
+#include <utils_file.h>
 
-#define ROOT_LEN         2
-#define MAX_PATH_LEN     40
-#define MaxOpenFile      32
-#define ROOT_PATH        "/data"
+typedef struct {
+    char *data;
+    char *path;
+    int   seek;
+    int   size;
+}File;
 
-typedef struct _File_Context {
-    int fs_fd;
-    unsigned char fd;
-} File_Context;
+#define MAX_FILES           36
+#define MAX_PATH_LEN        48
+#define MAX_OPEN_FILES      32    // the maximum number of open files required for adapting to openharmony xts
+#define FD_OFFSET           3     // std_in, std_out, std_err
 
-static File_Context File[MaxOpenFile] = { 0 };
+File files[MAX_FILES] = {0};
+int files_open_num    = 0;
 
-int Find_Free_Num(void)
+int HalFileOpen(const char *path, int oflag, int mode)
 {
-    int i = MaxOpenFile;
-    for (; i > 0; i--) {
-        if (File[i - 1].fd == 0) {
+    int fd = -1;
+    int path_len = strlen(path);
+
+    if (files_open_num == MAX_OPEN_FILES)
+        return -1;
+
+    if (path_len > MAX_PATH_LEN) {
+        return -1;
+    }
+
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (files[i].path != NULL && strcmp(files[i].path, path) == 0) {
+            fd = i;
             break;
         }
     }
 
-    return i;
-}
+    if (fd != -1) {
+        if (oflag & O_CREAT_FS && oflag & O_EXCL_FS) {
+            fd = -1;
+        }
+        else if (oflag & O_TRUNC_FS) {
+            free(files[fd].data);
+            files[fd].data = NULL;
+            files[fd].size = 0;
+            files[fd].seek = 0;
+        }
+        else if (oflag & O_APPEND_FS) {
+            files[fd].seek = files[fd].size;
+        }
+    }
+    else {
+        if (oflag == O_RDONLY_FS) {
+            return -1;
+        }
 
+        for (int i = 0; i < MAX_FILES; i++) {
+            if (files[i].path == NULL) {
+                fd = i;
+                break;
+            }
+        }
 
-int ReadModeChange(int oflag)
-{
-    int ret = 0;
-    int buffer = 0;
+        if (fd != -1) {
+            files[fd].data = NULL;
+            files[fd].size = 0;
+            files[fd].seek = 0;
 
-    buffer = (oflag & 0x000f);
-    if (buffer == O_RDONLY_FS) {
-        ret = O_RDONLY;
-    } else if (buffer == O_WRONLY_FS) {
-        ret = O_WRONLY;
-    } else if (buffer == O_RDWR_FS) {
-        ret = O_RDWR;
+            files[fd].path = (char*)malloc(path_len + 1);
+            memcpy(files[fd].path, path, path_len);
+            files[fd].path[path_len] = 0;
+        }
     }
 
-    buffer = (oflag & 0x00f0);
-    if ((buffer & 0x0040) != 0) {
-        ret |= O_CREAT;
+    if (fd != -1) {
+        fd = fd + FD_OFFSET;
+        files_open_num++;
     }
 
-    if ((buffer & 0x0080) != 0) {
-        ret |= O_EXCL;
-    }
-
-    buffer = (oflag & 0x0f00);
-    if ((buffer & 0x0200) != 0) {
-        ret |= O_TRUNC;
-    }
-
-    if ((buffer & 0x0400) != 0) {
-        ret |= O_APPEND;
-    }
-
-    return ret;
-}
-
-int HalFileOpen(const char *path, int oflag, int mode)
-{
-    char *file_path;
-    int fd;
-    uint16_t path_len;
-    if (strlen(path) >= MAX_PATH_LEN) {
-        LOG_E("path name is too long!!!\n");
-        return -1;
-    }
-
-    fd = Find_Free_Num();
-    if (fd == 0) {
-        LOG_E("NO enougn file Space!!!\n");
-        return -1;
-    }
-
-    path_len = strlen(path) + strlen(ROOT_PATH) + ROOT_LEN;
-    file_path = (char *)malloc(path_len);
-    if (file_path == NULL) {
-        LOG_E("malloc path name buffer failed!\n");
-        return -1;
-    }
-    strcpy_s(file_path, path_len, ROOT_PATH);
-    if (strcat_s(file_path, path_len, "/") != 0) {
-        return -1;
-    }
-    if (strcat_s(file_path, path_len, path) != 0) {
-        return -1;
-    }
-
-    int fs_fd = open(file_path, ReadModeChange(oflag));
-    if (fs_fd < 0) {
-        LOG_E("open file '%s' failed, %s\r\n", file_path, strerror(errno));
-        free(file_path);
-        return -1;
-    }
-
-    File[fd - 1].fd = 1;
-    File[fd - 1].fs_fd = fs_fd;
-    free(file_path);
     return fd;
 }
 
 int HalFileClose(int fd)
 {
-    int ret;
+    fd = fd - FD_OFFSET;
 
-    if ((fd > MaxOpenFile) || (fd <= 0)) {
+    if (fd < 0 || fd >= MAX_FILES || files[fd].path == NULL) {
         return -1;
     }
 
-    ret = close(File[fd - 1].fs_fd);
-    if (ret != 0) {
-        return -1;
+    if (files_open_num !=0 ) {
+        --files_open_num;
     }
 
-    File[fd - 1].fd = 0;
-    File[fd - 1].fs_fd = -1;
+    files[fd].seek = 0;
 
-    return ret;
+    return 0;
 }
 
-int HalFileRead(int fd, char *buf, unsigned int len)
-{
-    if ((fd > MaxOpenFile) || (fd <= 0)) {
+int HalFileRead(int fd, char *buf, unsigned int len) {
+    fd = fd - FD_OFFSET;
+
+    if (fd < 0 || fd >= MAX_FILES || files[fd].path == NULL) {
         return -1;
     }
 
-    return read(File[fd - 1].fs_fd, buf, len);
+    if (len == 0) {
+        return 0;
+    }
+
+    int bytesRead = 0;
+
+    if (files[fd].seek < files[fd].size) {
+        bytesRead = len;
+        if (bytesRead > files[fd].size - files[fd].seek) {
+            bytesRead = files[fd].size - files[fd].seek;
+        }
+        memcpy(buf, files[fd].data + files[fd].seek, bytesRead);
+        files[fd].seek += bytesRead;
+    }
+
+    return bytesRead;
 }
 
 int HalFileWrite(int fd, const char *buf, unsigned int len)
 {
-    if ((fd > MaxOpenFile) || (fd <= 0)) {
+    fd = fd - FD_OFFSET;
+
+    if (fd < 0 || fd >= MAX_FILES || files[fd].path == NULL) {
         return -1;
     }
 
-    return write(File[fd - 1].fs_fd, buf, len);
+    if (len == 0) {
+        return 0;
+    }
+
+    int bytesWritten = 0;
+
+    if (files[fd].seek + len > files[fd].size) {
+        char *newData = (char*)realloc(files[fd].data, files[fd].seek + len);
+        if (newData == NULL) {
+            return -1;
+        }
+        files[fd].data = newData;
+        files[fd].size = files[fd].seek + len;
+    }
+
+    memcpy(files[fd].data + files[fd].seek, buf, len);
+    files[fd].seek += len;
+    bytesWritten = len;
+
+    return bytesWritten;
 }
 
 int HalFileDelete(const char *path)
 {
-    char *file_path;
-    uint16_t path_len;
+    int result = -1;
 
-    if (strlen(path) >= MAX_PATH_LEN) {
-        LOG_E("path name is too long!!!\n");
-        return -1;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (files[i].path != NULL && strcmp(files[i].path, path) == 0) {
+            free(files[i].data);
+            files[i].data = NULL;
+            files[i].size = 0;
+            free(files[i].path);
+            files[i].path = NULL;
+            files[i].seek = 0;
+            result = 0;
+            break;
+        }
     }
 
-    path_len = strlen(path) + strlen(ROOT_PATH) + ROOT_LEN;
-    file_path = (char *)malloc(path_len);
-    if (file_path == NULL) {
-        LOG_E("malloc path name buffer failed!\n");
-        return -1;
-    }
-
-    strcpy_s(file_path, path_len, ROOT_PATH);
-    if (strcat_s(file_path, path_len, "/") != 0) {
-        return -1;
-    }
-    if (strcat_s(file_path, path_len, path) != 0) {
-        return -1;
-    }
-
-    int ret = unlink(file_path);
-    free(file_path);
-
-    return ret;
+    return result;
 }
 
 int HalFileStat(const char *path, unsigned int *fileSize)
 {
-    char *file_path;
-    struct stat f_info;
-    uint16_t path_len;
+    int result = -1;
 
-    if (strlen(path) >= MAX_PATH_LEN) {
-        LOG_E("path name is too long!!!\n");
-        return -1;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (files[i].path != NULL && strcmp(files[i].path, path) == 0) {
+            *fileSize = files[i].size;
+            result = 0;
+            break;
+        }
     }
 
-    path_len = strlen(path) + strlen(ROOT_PATH) + ROOT_LEN;
-    file_path = (char *)malloc(path_len);
-    if (file_path == NULL) {
-        LOG_E("malloc path name buffer failed!\n");
-        return -1;
-    }
-    strcpy_s(file_path, path_len, ROOT_PATH);
-    if (strcat_s(file_path, path_len, "/") != 0) {
-        return -1;
-    }
-    if (strcat_s(file_path, path_len, path) != 0) {
-        return -1;
-    }
-
-    int ret = stat(file_path, &f_info);
-    *fileSize = f_info.st_size;
-    free(file_path);
-
-    return ((ret == 0) ? 0 : -1);
+    return result;
 }
 
 int HalFileSeek(int fd, int offset, unsigned int whence)
 {
-    int ret = 0;
-    struct stat f_info;
+    fd = fd - FD_OFFSET;
 
-    if ((fd > MaxOpenFile) || (fd <= 0)) {
+    if (fd < 0 || fd >= MAX_FILES || files[fd].path == NULL) {
         return -1;
     }
 
-    ret = fstat(File[fd - 1].fs_fd, &f_info);
-    if (ret != 0) {
+    int newSeek = 0;
+
+    switch (whence) {
+        case SEEK_SET:
+            newSeek = offset;
+            break;
+        case SEEK_CUR:
+            newSeek = files[fd].seek + offset;
+            break;
+        case SEEK_END:
+            newSeek = files[fd].size + offset;
+            break;
+        default:
+            return -1;
+    }
+
+    if (newSeek < 0 || newSeek > files[fd].size) {
         return -1;
     }
 
-    if (whence == SEEK_SET_FS) {
-        if (offset > f_info.st_size) {
-            ret = -1;
-        }
-    }
+    files[fd].seek = newSeek;
 
-    ret = lseek(File[fd - 1].fs_fd, offset, whence);
-    if ((ret >  f_info.st_size) || (ret < 0)) {
-        return -1;
-    }
-
-    return ret;
+    return 0;
 }
