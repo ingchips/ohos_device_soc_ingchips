@@ -1,7 +1,7 @@
 #include "peripheral_uart.h"
 
 //  Update ther previous function for Cortex-M3 not support hard float calculate
-int apUART_BaudRateSet(UART_TypeDef* pBase, uint32_t ClockFrequency, uint32_t BaudRate)
+void apUART_BaudRateSet(UART_TypeDef* pBase, uint32_t ClockFrequency, uint32_t BaudRate)
 {
     uint32_t BaudRateDiv;
     uint32_t BaudIntDiv;
@@ -20,9 +20,8 @@ int apUART_BaudRateSet(UART_TypeDef* pBase, uint32_t ClockFrequency, uint32_t Ba
 
     pBase->IntBaudDivisor   = BaudIntDiv;
 
-    if (( BaudIntDiv > 65535 ) || ( BaudIntDiv == 0 )){
-        return -1;
-    }
+    if (( BaudIntDiv > 65535 ) || ( BaudIntDiv == 0 ))
+        for (;;);
 
     /* Calculate fractional baud rate register value */
     if ( BaudIntDiv == 65535 )
@@ -45,8 +44,6 @@ int apUART_BaudRateSet(UART_TypeDef* pBase, uint32_t ClockFrequency, uint32_t Ba
     //    UARTFBRD, a UARTLCR_H write must always be performed at the end.
     //
     pBase->LineCon_H = pBase->LineCon_H;
-
-    return 0;
 }
 
 
@@ -127,7 +124,10 @@ uint8_t apUART_Get_ITStatus(UART_TypeDef* pBase,uint8_t UART_IT)
 }
 
 
-
+uint32_t apUART_Get_INT_Mask(UART_TypeDef* pBase)
+{
+  return pBase->IntMask;
+}
 
 //
 void apUART_Enable_TRANSMIT_INT(UART_TypeDef* pBase)
@@ -171,12 +171,12 @@ void apUART_Clr_NonRx_INT(UART_TypeDef* pBase)
 }
 
 
-static void uart_disable(UART_TypeDef* pBase)
+static void apUART_uart_disable(UART_TypeDef* pBase)
 {
     pBase->Control &= (~(1<<bsUART_ENABLE));
 }
 
-static void uart_enable(UART_TypeDef* pBase)
+static void apUART_uart_enable(UART_TypeDef* pBase)
 {
     pBase->Control |= (1<<bsUART_ENABLE);
 }
@@ -193,11 +193,11 @@ static void uart_enable_fifo(UART_TypeDef* pBase)
 }
 
 
-void uart_reset(UART_TypeDef* pBase)
+void apUART_uart_reset(UART_TypeDef* pBase)
 {
 	apUART_Disable_RECEIVE_INT(pBase);
 
-	uart_disable(pBase);
+	apUART_uart_disable(pBase);
 
 	while (apUART_Check_RXFIFO_EMPTY(pBase) != 1)
 	{
@@ -209,7 +209,7 @@ void uart_reset(UART_TypeDef* pBase)
 
 	uart_enable_fifo(pBase);
 
-	uart_enable(pBase);
+	apUART_uart_enable(pBase);
 
 	apUART_Enable_RECEIVE_INT(pBase);
 
@@ -218,7 +218,7 @@ void uart_reset(UART_TypeDef* pBase)
 
 
 //
-int apUART_Initialize(UART_TypeDef* pBase, UART_sStateStruct* UARTx, uint32_t IntMask)
+void apUART_Initialize (UART_TypeDef* pBase, UART_sStateStruct* UARTx, uint32_t IntMask)
 {
 	// clear Control Register, UARTCR
 	pBase->Control = 0;
@@ -235,9 +235,7 @@ int apUART_Initialize(UART_TypeDef* pBase, UART_sStateStruct* UARTx, uint32_t In
 	// clear Line Control Register, UARTLCR_H
 	pBase->LineCon_H = 0;
 	// set BaudDivisor
-	if(0 != apUART_BaudRateSet(pBase, UARTx->ClockFrequency, UARTx->BaudRate)){
-        return -1;
-    }
+	apUART_BaudRateSet(pBase, UARTx->ClockFrequency, UARTx->BaudRate);
     // set Line Control Register, UARTLCR_H
 	pBase->LineCon_H = ( ((UARTx->parity >> 2) & 1) << bsUART_STICK_PARITY ) |  // SPS
                      (   UARTx->word_length       << bsUART_WORD_LENGTH  ) |  // WLEN
@@ -261,7 +259,6 @@ int apUART_Initialize(UART_TypeDef* pBase, UART_sStateStruct* UARTx, uint32_t In
                     UARTx->cts_en      << bsUART_CTS_ENA         |
                     UARTx->rts_en      << bsUART_RTS_ENA;
 
-    return 0;
 }
 
 void UART_SendData(UART_TypeDef* pBase, uint8_t Data)

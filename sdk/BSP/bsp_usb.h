@@ -8,15 +8,11 @@
 extern "C" {
 #endif
 
-// the flag to enable disconnection(cable unplugged), valid only when DP and DM are powered by VBUS
-//#define FEATURE_DISCONN_DETECT
-// the flag to enable WCID function
-#define FEATURE_WCID_SUPPORT
-
 // ATTENTION ! FIXED IO FOR USB on 916 series
 #define USB_PIN_DP GIO_GPIO_16
 #define USB_PIN_DM GIO_GPIO_17
 
+#if 0
 #define USB_STRING_LANGUAGE_IDX  0x00
 #define USB_STRING_LANGUAGE { 0x04, 0x03, 0x09, 0x04}
 
@@ -88,8 +84,11 @@ typedef struct
 
 #define EP_IN (1)/* EP1 is in */
 #define EP_OUT (2)
+#endif
+
 #define EP_X_MPS_BYTES (64)
 
+#if 0
 #define USB_EP_1_DESCRIPTOR \
 { \
   .size = sizeof(USB_EP_DESCRIPTOR_REAL_T), \
@@ -127,6 +126,8 @@ typedef struct
   0x00, 0x00 \
 }
 #endif
+
+#endif
 typedef enum
 {
   BSP_USB_PHY_DISABLE,
@@ -147,9 +148,7 @@ typedef struct
 }BSP_USB_VAR_s;
 
 extern void bsp_usb_init(void);
-extern void bsp_usb_disable(void);
 extern void bsp_usb_device_remote_wakeup(void);
-extern uint32_t bsp_usb_send_data(const uint8_t data[], uint32_t len);
 
 #ifdef FEATURE_DISCONN_DETECT
 void bsp_usb_device_disconn_timeout(void);

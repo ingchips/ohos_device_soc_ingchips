@@ -14,10 +14,9 @@
  */
 
 #include "reset.h"
-#include "platform_api.h"
 
 void RebootDevice(unsigned int cause)
 {
     //UNUSED(cause);
-    platform_reset();
+    // platform_reset();
 }
