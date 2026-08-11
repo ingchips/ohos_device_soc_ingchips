@@ -42,9 +42,9 @@ kernel_module(module_name) {
 }
 config("public") {
     include_dirs = [
-      "BSP",
-      "FWlib",
-      "Tools",
+      "src/BSP",
+      "src/FWlib",
+      "src/Tools",
       "bundles/noos_mini/inc",
     ]
     if (defined(LOSCFG_SOC_ING208_ROM)){
