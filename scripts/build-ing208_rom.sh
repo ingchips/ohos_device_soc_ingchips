@@ -17,15 +17,21 @@ HOST_SRC="${HOST_SRC:-/home/ming/openharmony/source}"
 echo "==== [0/4] 确保 sdk/BUILD.gn 芯片分支(repo 同步可能覆盖) ===="
 python3 device/soc/ingchips/scripts/ensure_sdk_build_gn.py
 
-echo "==== [1/4] 同步 SDK 符号表与 ld 布局 (apis.json/meta.json -> symdefs.g/ing208_rom.ld, rom bundle) ===="
+echo "==== [1/5] 同步 SDK 符号表与 ld 布局 (apis.json/meta.json -> symdefs.g/ing208_rom.ld, rom bundle) ===="
 python3 device/soc/ingchips/scripts/gen_symdefs.py ING208xx_rom
 python3 device/soc/ingchips/scripts/gen_ld.py ING208xx_rom
 
-echo "==== [2/4] hb set -p ing208_rom + hb build ===="
+echo "==== [2/5] hb set -p ing208_rom + hb build ===="
 hb set -p ing208_rom 2>&1 | tail -1
 hb build "$@"
 
-echo "==== [4/4] 更新 compile_commands.json ===="
+echo "==== [3/5] 处理 rom platform.bin（写入 app 初始 SP, 使 OS 移植可直接运行）===="
+python3 device/soc/ingchips/scripts/update_for_rtos.py \
+    device/soc/ingchips/sdk/bundles/rom/ING208xx/platform.bin \
+    out/ing208_rom/ing208_rom/OHOS_Image.bin \
+    out/ing208_rom/ing208_rom/platform.bin
+
+echo "==== [5/5] 更新 compile_commands.json ===="
 "$NINJA" -C out/ing208_rom/ing208_rom -t compdb cxx cc > /tmp/cc_raw.json
 python3 - "$HOST_SRC" <<'PYEOF'
 import json, sys
