@@ -12,7 +12,7 @@ cd "$(dirname "$0")/../../../.."
 
 NINJA=/home/ohos/openharmony/prebuilts/build-tools/linux-x86/bin/ninja
 # 宿主源码路径（compile_commands.json 的路径映射目标）
-HOST_SRC=/home/ming/openharmony/source
+HOST_SRC="${HOST_SRC:-/home/ming/openharmony/source}"
 
 echo "==== [0/4] 确保 sdk/BUILD.gn 芯片分支(repo 同步可能覆盖) ===="
 python3 device/soc/ingchips/scripts/ensure_sdk_build_gn.py
