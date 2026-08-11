@@ -66,6 +66,25 @@ DRAM_PAD = 0x50
 CHIP_DRAM_PAD = {
     "ING9168xx": 0x50,
     "ING208xx": 0x50,
+    "ING208xx_rom": 0x50,
+}
+
+# sys ram 顶（写死，按芯片固件实际可用 RAM 对齐）：
+#   - 916 mini: 56K  -> 0x2000E000
+#   - ing20 mini: 48K -> 0x2000C000
+#   - ing20 rom: 40K  -> 0x2000A000（用户配置）
+# RAM.LENGTH 由 gen_ld 自动计算 = CHIP_RAM_TOP - RAM.ORIGIN
+CHIP_RAM_TOP = {
+    "ING9168xx": 0x2000E000,
+    "ING208xx": 0x2000C000,
+    "ING208xx_rom": 0x2000A000,
+}
+
+# DRAM(liteos 堆) LENGTH（写死；rom 版本 40K 限制内缩为 10K）
+CHIP_DRAM_LEN = {
+    "ING9168xx": 0x5500,
+    "ING208xx": 0x5500,
+    "ING208xx_rom": 0x2800,
 }
 
 
@@ -86,39 +105,55 @@ def compute(chip, meta):
     ram_size = meta.get("ram", {}).get("size")
     if app is None or ram_base is None or ram_size is None:
         raise ValueError(f"{chip} meta.json 缺少 app.base/ram.base/ram.size")
+    dram_origin = align(ram_base + ram_size + CHIP_DRAM_PAD.get(chip, DRAM_PAD), 8)
     return {
         "FLASH": app,
-        "DRAM": align(ram_base + ram_size + CHIP_DRAM_PAD.get(chip, DRAM_PAD), 8),
+        "DRAM_ORIGIN": dram_origin,
+        "DRAM_LENGTH": CHIP_DRAM_LEN.get(chip, 0x5500),
+        "RAM_TOP": CHIP_RAM_TOP.get(chip),
     }
 
 
-def update_ld(ld_path, new_origins, chip, check_only):
+def update_ld(ld_path, cfg, chip, check_only):
+    """cfg: {FLASH, DRAM_ORIGIN, DRAM_LENGTH, RAM_TOP}"""
     segs, lines = parse_ld(ld_path)
     if "FLASH" not in segs or "DRAM" not in segs:
         print(f"[skip] {chip}: {os.path.basename(ld_path)} 缺少 FLASH/DRAM 段（格式不支持）")
         return []
-    dram_len = segs["DRAM"][1]
-    ram_origin = new_origins["DRAM"] + dram_len
-    new_origins = dict(new_origins)
-    new_origins["RAM"] = ram_origin
+    ram_origin = cfg["DRAM_ORIGIN"] + cfg["DRAM_LENGTH"]
+    ram_len = cfg["RAM_TOP"] - ram_origin
+    if ram_len <= 0:
+        print(f"[error] {chip}: RAM 段溢出! DRAM.ORIGIN=0x{cfg['DRAM_ORIGIN']:X} + LENGTH=0x{cfg['DRAM_LENGTH']:X} "
+              f"= 0x{ram_origin:X} 超过 RAM_TOP 0x{cfg['RAM_TOP']:X}")
+        return []
 
+    # 段名 -> (ORIGIN, LENGTH)
+    updates = {
+        "FLASH": (cfg["FLASH"], None),
+        "DRAM": (cfg["DRAM_ORIGIN"], cfg["DRAM_LENGTH"]),
+        "RAM": (ram_origin, ram_len),
+    }
     out = []
     changed = []
     for ln in lines:
         m = ORIGIN_RE.match(ln)
-        if m and m.group(1) in new_origins:
+        if m and m.group(1) in updates:
             name = m.group(1)
-            new_org = new_origins[name]
+            new_org, new_len = updates[name]
             old_org = int(m.group(2), 16)
-            if new_org != old_org:
-                changed.append((name, old_org, new_org))
+            old_len = int(m.group(3), 0)
+            if new_len is None:
+                new_len = old_len
+            if new_org != old_org or new_len != old_len:
+                changed.append((name, old_org, old_len, new_org, new_len))
                 ln = ln.replace(m.group(2), f"0x{new_org:X}")
+                ln = ln.replace(m.group(3), f"0x{new_len:X}")
         out.append(ln)
 
     if changed:
         print(f"[{chip}] {os.path.basename(ld_path)}:")
-        for name, old, new in changed:
-            print(f"    {name}.ORIGIN: 0x{old:X} -> 0x{new:X}")
+        for name, oo, ol, no, nl in changed:
+            print(f"    {name}: ORIGIN 0x{oo:X}->0x{no:X}, LENGTH 0x{ol:X}->0x{nl:X}")
         if not check_only:
             with open(ld_path, "w", encoding="utf-8") as f:
                 f.writelines(out)
@@ -154,14 +189,14 @@ def main():
             rc = 1
             continue
         meta = json.load(open(meta_path, encoding="utf-8"))
-        new_origins = compute(chip, meta)
+        cfg = compute(chip, meta)
         board_chip, ld_name, _ = CHIP_BOARD_MAP[chip]
         ld_path = os.path.join(board, board_chip, "liteos_m", ld_name)
         if not os.path.isfile(ld_path):
             print(f"[skip] {chip}: 无 ld {ld_path}", file=sys.stderr)
             rc = 1
             continue
-        update_ld(ld_path, new_origins, chip, args.check)
+        update_ld(ld_path, cfg, chip, args.check)
     return rc
 
 
