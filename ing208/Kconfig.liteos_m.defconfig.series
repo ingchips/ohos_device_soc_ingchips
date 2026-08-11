@@ -11,4 +11,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import("//drivers/hdf_core/adapter/khdf/liteos_m/hdf.gni")
+if SOC_SERIES_ING208
+
+rsource "Kconfig.liteos_m.defconfig.ing208"
+
+config SOC_SERIES
+    string
+    default "ing208"
+
+config NUM_IRQS
+    int
+    default 45
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+    int
+    default 64000000
+
+endif
+

@@ -11,4 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import("//drivers/hdf_core/adapter/khdf/liteos_m/hdf.gni")
+config SOC
+    string
+    default "ing208"
+    depends on SOC_ING208

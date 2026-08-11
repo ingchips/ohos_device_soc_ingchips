@@ -11,4 +11,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import("//drivers/hdf_core/adapter/khdf/liteos_m/hdf.gni")
+config SOC_SERIES_ING208
+    bool "ingchips ing208 Series"
+    select ARM
+    select SOC_COMPANY_INGCHIPS
+    select CPU_CORTEX_M3
+    help
+        Enable support for ingchips ing208 series
+

@@ -11,4 +11,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import("//drivers/hdf_core/adapter/khdf/liteos_m/hdf.gni")
+choice
+    prompt "ingchips ing208 series SoC"
+    depends on SOC_SERIES_ING208
+
+config SOC_ING208
+    bool "SoC ing208"
+config SOC_ING208_ROM
+    bool "SoC ing208 (rom 版本)"
+endchoice
