@@ -115,24 +115,40 @@ def compute(chip, meta):
 
 
 def update_ld(ld_path, cfg, chip, check_only):
-    """cfg: {FLASH, DRAM_ORIGIN, DRAM_LENGTH, RAM_TOP}"""
+    """cfg: {FLASH, DRAM_ORIGIN, DRAM_LENGTH, RAM_TOP}（DRAM_* 仅在有 DRAM 段时使用）"""
     segs, lines = parse_ld(ld_path)
-    if "FLASH" not in segs or "DRAM" not in segs:
-        print(f"[skip] {chip}: {os.path.basename(ld_path)} 缺少 FLASH/DRAM 段（格式不支持）")
-        return []
-    ram_origin = cfg["DRAM_ORIGIN"] + cfg["DRAM_LENGTH"]
-    ram_len = cfg["RAM_TOP"] - ram_origin
-    if ram_len <= 0:
-        print(f"[error] {chip}: RAM 段溢出! DRAM.ORIGIN=0x{cfg['DRAM_ORIGIN']:X} + LENGTH=0x{cfg['DRAM_LENGTH']:X} "
-              f"= 0x{ram_origin:X} 超过 RAM_TOP 0x{cfg['RAM_TOP']:X}")
+    if "FLASH" not in segs:
+        print(f"[skip] {chip}: {os.path.basename(ld_path)} 缺少 FLASH 段（格式不支持）")
         return []
 
-    # 段名 -> (ORIGIN, LENGTH)
-    updates = {
-        "FLASH": (cfg["FLASH"], None),
-        "DRAM": (cfg["DRAM_ORIGIN"], cfg["DRAM_LENGTH"]),
-        "RAM": (ram_origin, ram_len),
-    }
+    if "DRAM" in segs:
+        # 有 DRAM（liteos 堆区）变体：RAM 起点 = DRAM 之后
+        ram_origin = cfg["DRAM_ORIGIN"] + cfg["DRAM_LENGTH"]
+    else:
+        # 无 DRAM 变体（如 ing208_rom：liteos 堆用协议栈内部 FreeRTOS 堆）:
+        # RAM 直接接在 platform RAM 之后，只同步 FLASH 与 RAM，不动 DRAM（不存在）
+        ram_origin = cfg["DRAM_ORIGIN"]  # = align(platform ram 顶 + pad, 8)
+    ram_top = cfg["RAM_TOP"]
+    if ram_top is None:
+        print(f"[skip] {chip}: 未配置 CHIP_RAM_TOP（ld 不更新，保持现状）")
+        return []
+    ram_len = ram_top - ram_origin
+    if ram_len <= 0:
+        print(f"[error] {chip}: RAM 段溢出! RAM 起点 0x{ram_origin:X} 超过 RAM_TOP 0x{ram_top:X}")
+        return []
+
+    if "DRAM" in segs:
+        updates = {
+            "FLASH": (cfg["FLASH"], None),
+            "DRAM": (cfg["DRAM_ORIGIN"], cfg["DRAM_LENGTH"]),
+            "RAM": (ram_origin, ram_len),
+        }
+    else:
+        updates = {
+            "FLASH": (cfg["FLASH"], None),
+            "RAM": (ram_origin, ram_len),
+        }
+
     out = []
     changed = []
     for ln in lines:
