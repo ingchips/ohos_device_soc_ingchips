@@ -52,12 +52,14 @@ MODE="docker"
 EXTRA=()
 PRODUCT=""
 INTERACTIVE=0
+GEN=1   # 1=编译前生成符号表/BUILD.gn/ld；0=跳过（--no-gen）
 
 # 解析参数
 for arg in "$@"; do
     case "$arg" in
         --local)  MODE="local" ;;
         --docker) MODE="docker" ;;
+        --no-gen) GEN=0 ;;
         --) shift; EXTRA+=("$@"); break ;;
         *)
             case "$arg" in
@@ -66,7 +68,7 @@ for arg in "$@"; do
                 ing916|ing208|ing208_rom|ing9187|ing9188)
                     [ -n "$PRODUCT" ] && { echo "[错误] 一次只编译一个目标（当前已选 $PRODUCT，又给 $arg）"; exit 1; }
                     PRODUCT="$arg" ;;
-                *) echo "[错误] 未知产品: $arg（支持 ${PRODUCT_LIST[*]} / all）"; exit 1 ;;
+                *) echo "[错误] 未知产品: $arg（支持 ${PRODUCT_LIST[*]} / all）；参数: --local/--docker/--no-gen"; exit 1 ;;
             esac ;;
     esac
 done
@@ -98,8 +100,12 @@ BUNDLE="$(bundle_of "$PRODUCT")"
 echo ""
 echo "########## [$PRODUCT] 开始（bundle: $BUNDLE）##########"
 
-echo "==== [0/3] 代码准备：符号表 + ld 修正（gen-all.sh，宿主机本地执行）===="
-bash "$SCRIPT_DIR/gen-all.sh" "$BUNDLE"
+if [ "$GEN" -eq 1 ]; then
+    echo "==== [0/3] 代码准备：符号表 + ld 修正（gen-all.sh，宿主机本地执行）===="
+    bash "$SCRIPT_DIR/gen-all.sh" "$BUNDLE"
+else
+    echo "==== [0/3] 跳过代码准备（--no-gen：不生成符号表/BUILD.gn/ld）===="
+fi
 
 echo "==== [1/3] hb set -p $PRODUCT + hb build（模式: $MODE）===="
 if [ "$MODE" = "docker" ]; then
