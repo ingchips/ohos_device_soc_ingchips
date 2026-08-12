@@ -78,6 +78,9 @@ CHIP_RAM_TOP = {
     "ING9168xx": 0x2000E000,
     "ING208xx": 0x2000C000,
     "ING208xx_rom": 0x2000A000,
+    # ing918 系列: ram 共 128K（0x20000000-0x20020000）
+    "ING9187xx": 0x20020000,
+    "ING9188xx": 0x20020000,
 }
 
 # DRAM(liteos 堆) LENGTH（写死；rom 版本 40K 限制内缩为 10K）
