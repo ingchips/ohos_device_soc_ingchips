@@ -22,7 +22,7 @@
 #   bash build.sh all                      # 同无参数（列出目标供选择）
 #   bash build.sh <product>                # 指定单个目标（默认 docker）
 #   bash build.sh <product> --no-gen       # 跳过符号表/BUILD.gn/ld 生成，只编译
-#   bash build.sh <product> --local        # 宿主机本地 hb 编译
+#   bash build.sh <product> --local        # 本地 hb 编译（工具齐备的 Linux 直接调用 hb，无需 docker）
 #   bash build.sh ing208 -- -p xxxx        # 透传 hb build 参数
 #
 # 依赖：
@@ -115,17 +115,26 @@ if [ "$MODE" = "docker" ]; then
     }
     docker exec -i -u ohos "$CONTAINER" bash -lc "cd /home/ohos/openharmony && /home/ohos/.local/bin/hb set -p $PRODUCT && /home/ohos/.local/bin/hb build ${EXTRA[*]:-}" 2>&1 | tail -5
 else
-    command -v hb >/dev/null || { echo "[错误] 本地模式需要宿主机安装 hb（command -v hb 失败）"; exit 1; }
+    # 本地模式：对应工具齐备的 Linux 环境直接调用 hb（无需 docker）
+    command -v hb >/dev/null || {
+        echo "[错误] 本地模式需要宿主机安装 hb（pip install hb，或用 docker 模式）"; exit 1; }
+    command -v gn >/dev/null || echo "[提示] 未找到 gn——若编译失败请确认 OHOS 编译链(gn/gcc/llvm)在 PATH 或 prebuilts 已就绪"
+    # hb 通常装在 ~/.local/bin（pip --user），确保在 PATH
+    case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
     cd "$REPO"
     hb set -p "$PRODUCT"
     hb build "${EXTRA[@]:-}"
 fi
 
 echo "==== [2/3] 更新 compile_commands.json 到源码根 ===="
-docker exec -i -u ohos "$CONTAINER" bash -lc '
-    CDB=/home/ohos/openharmony/out/'$PRODUCT'/compile_commands.json
-    [ -f "$CDB" ] && cp "$CDB" /home/ohos/openharmony/compile_commands.json && echo "    已更新 compile_commands.json" || echo "    （无 compile_commands.json，跳过）"
-' 2>/dev/null || { [ "$MODE" = "local" ] && { [ -f "$REPO/out/$PRODUCT/compile_commands.json" ] && cp "$REPO/out/$PRODUCT/compile_commands.json" "$REPO/compile_commands.json" && echo "    已更新 compile_commands.json"; }; }
+if [ "$MODE" = "local" ]; then
+    [ -f "$REPO/out/$PRODUCT/compile_commands.json" ] && cp "$REPO/out/$PRODUCT/compile_commands.json" "$REPO/compile_commands.json" && echo "    已更新 compile_commands.json" || echo "    （无 compile_commands.json，跳过）"
+else
+    docker exec -i -u ohos "$CONTAINER" bash -lc '
+        CDB=/home/ohos/openharmony/out/'$PRODUCT'/compile_commands.json
+        [ -f "$CDB" ] && cp "$CDB" /home/ohos/openharmony/compile_commands.json && echo "    已更新 compile_commands.json" || echo "    （无 compile_commands.json，跳过）"
+    ' 2>/dev/null || echo "    （无 compile_commands.json，跳过）"
+fi
 
 echo ""
 echo "==== 编译完成: $PRODUCT（$MODE）===="
