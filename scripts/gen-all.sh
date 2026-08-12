@@ -4,22 +4,21 @@
 #
 # 作用（对应"宿主机直接开发"的代码准备阶段）：
 #   1. gen_symdefs.py : 从 bundles/*/apis.json 生成各芯片符号表 symdefs.g
-#      （协议栈接口函数地址，供链接器 --just-symbols 引用）
-#   2. gen_ld.py      : 从 bundles/*/meta.json 修正各芯片 ld 的
-#      FLASH/RAM/DRAM 的 ORIGIN/LENGTH（解决 SDK 更新后 ld 与预期不符）
+#   2. gen_ld.py      : 从 bundles/*/meta.json 修正各芯片 ld 内存布局
 #   3. ensure_sdk_build_gn.py : 生成 sdk/BUILD.gn（repo 同步可能覆盖芯片分支）
 #
-# 本脚本只依赖 python3 + 本地 SDK（source/device/soc/ingchips/sdk），
-# 在宿主机直接运行；编译（hb）才需要 docker（见 build.sh）。
+# 目标选择：
+#   - 指定芯片（如 ING208xx）或 --all（全部）时直接执行；
+#   - 不带参数时列出支持的目标，交互选择（含 all）。
 #
 # 用法：
-#   bash gen-all.sh                 # 生成全部已注册芯片
-#   bash gen-all.sh ING9168xx       # 只生成指定芯片
+#   bash gen-all.sh                 # 交互选择芯片
+#   bash gen-all.sh --all           # 全部芯片（非交互）
+#   bash gen-all.sh ING208xx        # 只处理指定芯片
 #   bash gen-all.sh --check         # 只预览（不写入）
 # =============================================================================
 set -euo pipefail
 
-# 仓库根（source 目录）：脚本位于 device/soc/ingchips/scripts/
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="${REPO:-$(cd "$SCRIPT_DIR/../../../.." && pwd)}"
 SCRIPTS="$REPO/device/soc/ingchips/scripts"
@@ -27,28 +26,55 @@ SDK="$REPO/device/soc/ingchips/sdk"
 
 [ -d "$SDK/bundles" ] || { echo "[错误] 未找到 SDK bundles: $SDK/bundles（请先 repo 同步 SDK 或检查路径）"; exit 1; }
 
+# 支持的目标（芯片 bundle 名）
+CHIP_LIST=(ING9168xx ING9187xx ING9188xx ING208xx ING208xx_rom)
+
 CHECK=""
 CHIPS=()
+ALL=0
 for arg in "$@"; do
-    if [ "$arg" = "--check" ]; then CHECK="--check"; else CHIPS+=("$arg"); fi
+    case "$arg" in
+        --check) CHECK="--check" ;;
+        --all)   ALL=1 ;;
+        *)       CHIPS+=("$arg") ;;
+    esac
 done
+
+# 无目标且未指定 all -> 交互选择
+if [ ${#CHIPS[@]} -eq 0 ] && [ "$ALL" -eq 0 ]; then
+    echo "可用目标（芯片）："
+    for i in "${!CHIP_LIST[@]}"; do
+        echo "  $((i+1))) ${CHIP_LIST[$i]}"
+    done
+    echo "  $(( ${#CHIP_LIST[@]} + 1 ))) all"
+    printf "请选择编号 [1-%d]（回车=all）: " "$(( ${#CHIP_LIST[@]} + 1 ))"
+    read -r SEL || { echo ""; echo "[提示] 非交互环境请用: bash gen-all.sh --all 或指定芯片"; exit 1; }
+    SEL="${SEL:-$(( ${#CHIP_LIST[@]} + 1 ))}"
+    case "$SEL" in
+        [0-9]*)
+            if [ "$SEL" -le "${#CHIP_LIST[@]}" ]; then
+                CHIPS=("${CHIP_LIST[$((SEL-1))]}")
+            elif [ "$SEL" -eq "$(( ${#CHIP_LIST[@]} + 1 ))" ]; then
+                ALL=1
+            else
+                echo "[错误] 无效编号: $SEL"; exit 1
+            fi ;;
+        *) echo "[错误] 无效输入: $SEL"; exit 1 ;;
+    esac
+fi
+
+if [ "$ALL" -eq 1 ]; then
+    CHIPS=("${CHIP_LIST[@]}")
+fi
 
 echo "==== [1/3] 确保 sdk/BUILD.gn（repo 同步可能覆盖芯片分支）===="
 python3 "$SCRIPTS/ensure_sdk_build_gn.py"
 
 echo "==== [2/3] 生成符号表 symdefs.g（apis.json -> 符号）===="
-if [ ${#CHIPS[@]} -gt 0 ]; then
-    python3 "$SCRIPTS/gen_symdefs.py" "${CHIPS[@]}" $CHECK
-else
-    python3 "$SCRIPTS/gen_symdefs.py" $CHECK
-fi
+python3 "$SCRIPTS/gen_symdefs.py" "${CHIPS[@]}" $CHECK
 
 echo "==== [3/3] 修正 ld 内存布局（meta.json -> FLASH/RAM/DRAM）===="
-if [ ${#CHIPS[@]} -gt 0 ]; then
-    python3 "$SCRIPTS/gen_ld.py" "${CHIPS[@]}" $CHECK
-else
-    python3 "$SCRIPTS/gen_ld.py" $CHECK
-fi
+python3 "$SCRIPTS/gen_ld.py" "${CHIPS[@]}" $CHECK
 
 echo ""
-echo "完成。下一步编译：bash <source>/device/soc/ingchips/scripts/build.sh <ing916|ing208|ing208_rom|ing9187|ing9188>"
+echo "完成。下一步编译：bash <source>/device/soc/ingchips/scripts/build.sh"
