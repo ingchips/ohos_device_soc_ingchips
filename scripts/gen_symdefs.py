@@ -64,6 +64,13 @@ def generate(apis_path, symdefs_path):
             raise ValueError(f"非法符号地址 {name}={addr} in {apis_path}")
         lines.append(f"{name} = {addr};")
     content = "".join(l + "\n" for l in lines)
+
+    # 幂等：目标文件已存在且内容一致时跳过写入（避免重复生成/无关改动）
+    if symdefs_path != os.devnull and os.path.isfile(symdefs_path):
+        with open(symdefs_path, "r", encoding="utf-8") as f:
+            if f.read() == content:
+                return -1  # 已存在且一致（未写入）
+
     with open(symdefs_path, "w", encoding="utf-8") as f:
         f.write(content)
     return len(lines)
@@ -86,6 +93,10 @@ def main():
             print(f"[skip] {chip}: 无 apis.json")
             continue
         count = generate(apis_path, symdefs_path if not args.check else os.devnull)
+        if count == -1:
+            print(f"[skip] {chip}: symdefs.g 已存在且一致（跳过写入）")
+            changed = True
+            continue
         status = "OK" if not args.check else "check-OK"
         print(f"[{status}] {chip}: {count} 个符号 -> symdefs.g")
         changed = True
