@@ -6,7 +6,9 @@
 #   - 指定产品（ing916/ing208/ing208_rom/ing9187/ing9188）时直接编译该目标；
 #   - 不带参数（或传 all）时列出支持的目标，交互选择其中一个；
 #   - 本脚本一次只编译一个目标（build 只选定一个目标）。
-# 编译模式：默认 docker 容器（ohos-build-env）；宿主机已装 hb 可 --local。
+# 编译模式两种：
+#   - docker（默认）：主机调用 docker 指令 -> 容器内 hb 编译（主机不需要装 hb）
+#   - local（--local）：主机工具齐备（hb + gn/gcc 编译链）时直接调用 hb 编译，不依赖 docker
 # 编译前自动执行 gen-all.sh（符号表 + ld 修正，只处理对应芯片）。
 #
 # 芯片内存布局速览：
