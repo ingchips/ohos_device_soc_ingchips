@@ -21,6 +21,7 @@
 #   bash build.sh                          # 交互选择一个目标
 #   bash build.sh all                      # 同无参数（列出目标供选择）
 #   bash build.sh <product>                # 指定单个目标（默认 docker）
+#   bash build.sh <product> --no-gen       # 跳过符号表/BUILD.gn/ld 生成，只编译
 #   bash build.sh <product> --local        # 宿主机本地 hb 编译
 #   bash build.sh ing208 -- -p xxxx        # 透传 hb build 参数
 #
