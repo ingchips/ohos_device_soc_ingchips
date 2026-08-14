@@ -104,13 +104,13 @@ echo ""
 echo "########## [$PRODUCT] 开始（bundle: $BUNDLE）##########"
 
 if [ "$GEN" -eq 1 ]; then
-    echo "==== [0/3] 代码准备：符号表 + ld 修正（gen-all.sh，宿主机本地执行）===="
+    echo "==== [0/4] 代码准备：符号表 + ld 修正（gen-all.sh，宿主机本地执行）===="
     bash "$SCRIPT_DIR/gen-all.sh" "$BUNDLE"
 else
-    echo "==== [0/3] 跳过代码准备（--no-gen：不生成符号表/BUILD.gn/ld）===="
+    echo "==== [0/4] 跳过代码准备（--no-gen：不生成符号表/BUILD.gn/ld）===="
 fi
 
-echo "==== [1/3] hb set -p $PRODUCT + hb build（模式: $MODE）===="
+echo "==== [1/4] hb set -p $PRODUCT + hb build（模式: $MODE）===="
 if [ "$MODE" = "docker" ]; then
     docker ps --format '{{.Names}}' | grep -qx "$CONTAINER" || {
         echo "[错误] 容器 $CONTAINER 未运行（docker 模式需要容器，见 docs/hb-build-env-install.md）"; exit 1
@@ -128,7 +128,7 @@ else
     hb build "${EXTRA[@]:-}"
 fi
 
-echo "==== [2/3] 更新 compile_commands.json 到源码根 ===="
+echo "==== [2/4] 更新 compile_commands.json 到源码根 ===="
 if [ "$MODE" = "local" ]; then
     [ -f "$REPO/out/$PRODUCT/compile_commands.json" ] && cp "$REPO/out/$PRODUCT/compile_commands.json" "$REPO/compile_commands.json" && echo "    已更新 compile_commands.json" || echo "    （无 compile_commands.json，跳过）"
 else
@@ -136,6 +136,21 @@ else
         CDB=/home/ohos/openharmony/out/'$PRODUCT'/compile_commands.json
         [ -f "$CDB" ] && cp "$CDB" /home/ohos/openharmony/compile_commands.json && echo "    已更新 compile_commands.json" || echo "    （无 compile_commands.json，跳过）"
     ' 2>/dev/null || echo "    （无 compile_commands.json，跳过）"
+fi
+
+echo "==== [3/4] rom 版处理 platform.bin（update_for_rtos，写入 app 初始 SP）===="
+if [ "$PRODUCT" = "ing208_rom" ]; then
+    ROM_PLAT="$REPO/device/soc/ingchips/sdk/bundles/rom/ING208xx/platform.bin"
+    APP_BIN="$REPO/out/ing208_rom/ing208_rom/OHOS_Image.bin"
+    OUT_PLAT="$REPO/out/ing208_rom/ing208_rom/platform.bin"
+    if [ -f "$ROM_PLAT" ] && [ -f "$APP_BIN" ]; then
+        python3 "$SCRIPT_DIR/update_for_rtos.py" "$ROM_PLAT" "$APP_BIN" "$OUT_PLAT"
+        echo "    已处理: $OUT_PLAT（烧录用此文件）"
+    else
+        echo "    [警告] 缺少输入（$ROM_PLAT 或 $APP_BIN），跳过处理——烧录 rom 版请先确认产物"
+    fi
+else
+    echo "    （$PRODUCT 非 rom 版，跳过）"
 fi
 
 echo ""

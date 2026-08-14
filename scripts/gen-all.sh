@@ -67,14 +67,25 @@ if [ "$ALL" -eq 1 ]; then
     CHIPS=("${CHIP_LIST[@]}")
 fi
 
-echo "==== [1/3] 确保 sdk/BUILD.gn（repo 同步可能覆盖芯片分支）===="
+echo "==== [1/4] 确保 sdk/BUILD.gn（repo 同步可能覆盖芯片分支）===="
 python3 "$SCRIPTS/ensure_sdk_build_gn.py"
 
-echo "==== [2/3] 生成符号表 symdefs.g（apis.json -> 符号）===="
+echo "==== [2/4] 生成符号表 symdefs.g（apis.json -> 符号）===="
 python3 "$SCRIPTS/gen_symdefs.py" "${CHIPS[@]}" $CHECK
 
-echo "==== [3/3] 修正 ld 内存布局（meta.json -> FLASH/RAM/DRAM）===="
+echo "==== [3/4] 修正 ld 内存布局（meta.json -> FLASH/RAM/DRAM）===="
 python3 "$SCRIPTS/gen_ld.py" "${CHIPS[@]}" $CHECK
 
 echo ""
 echo "完成。下一步编译：bash <source>/device/soc/ingchips/scripts/build.sh"
+
+echo "==== [4/4] rom 版处理 platform.bin（update_for_rtos，产物存在时）===="
+ROM_PLAT="$REPO/device/soc/ingchips/sdk/bundles/rom/ING208xx/platform.bin"
+APP_BIN="$REPO/out/ing208_rom/ing208_rom/OHOS_Image.bin"
+OUT_PLAT="$REPO/out/ing208_rom/ing208_rom/platform.bin"
+if [ -f "$ROM_PLAT" ] && [ -f "$APP_BIN" ]; then
+    python3 "$SCRIPTS/update_for_rtos.py" "$ROM_PLAT" "$APP_BIN" "$OUT_PLAT"
+    echo "    已处理: $OUT_PLAT（烧录 rom 版用此文件）"
+else
+    echo "    （无 rom 产物：手动编译过 ing208_rom 后重跑本脚本可处理；build.sh 编译后也会自动处理）"
+fi
